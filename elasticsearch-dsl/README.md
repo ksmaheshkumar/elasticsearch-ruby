@@ -1,7 +1,7 @@
 # Elasticsearch::DSL
 
-The `elasticsearch-dsl` library provides a Ruby DSL builder for
-the [Elasticsearch](http://elasticsearch.org) DSL.
+The `elasticsearch-dsl` library provides a Ruby API for
+the [Elasticsearch Query DSL](http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/query-dsl.html).
 
 The library is compatible with Ruby 1.9 or higher and Elasticsearch 1.0 and higher.
 
@@ -24,15 +24,15 @@ or install it from a source code checkout:
 
 ## Usage
 
-The library is designed as a group of standalone Ruby modules and DSL methods, which provide
-an idiomatic way to build complex search definitions:
+The library is designed as a group of standalone Ruby modules, classes and DSL methods,
+which provide an idiomatic way to build complex
+[search definitions](http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/search-request-body.html).
+
+Let's have a simple example using the declarative variant:
 
 ```ruby
-require 'elasticsearch'
 require 'elasticsearch/dsl'
 include Elasticsearch::DSL
-
-client = Elasticsearch::Client.new trace: true
 
 definition = search do
   query do
@@ -42,6 +42,9 @@ end
 
 definition.to_hash
 # => { query: { match: { title: "test"} } }
+
+require 'elasticsearch'
+client = Elasticsearch::Client.new trace: true
 
 client.search body: definition
 # curl -X GET 'http://localhost:9200/test/_search?pretty' -d '{
@@ -55,11 +58,99 @@ client.search body: definition
 # => {"took"=>10, "hits"=> {"total"=>42, "hits"=> [...] } }
 ```
 
+Let's build the same definition in a more imperative fashion:
+
+```ruby
+require 'elasticsearch/dsl'
+include Elasticsearch::DSL
+
+definition = Search::Search.new
+definition.query = Search::Queries::Match.new title: 'test'
+
+definition.to_hash
+# => { query: { match: { title: "test"} } }
+```
+
+The library doesn't depend on an Elasticsearch client -- its sole purpose is to facilitate
+building search definitions in Ruby. This makes it possible to use it with any Elasticsearch client:
+
+```ruby
+require 'elasticsearch/dsl'
+include Elasticsearch::DSL
+
+definition = search { query { match title: 'test' } }
+
+require 'json'
+require 'faraday'
+client   = Faraday.new(url: 'http://localhost:9200')
+response = JSON.parse(
+              client.post(
+                '/_search',
+                JSON.dump(definition.to_hash),
+                { 'Accept' => 'application/json', 'Content-Type' => 'application/json' }
+              ).body
+            )
+# => {"took"=>10, "hits"=> {"total"=>42, "hits"=> [...] } }
+```
+
+## Features Overview
+
+The library allows to programatically build complex search definitions for Elasticsearch in Ruby,
+which are translated to Hashes, and ultimately, JSON, the language of Elasticsearch.
+
+All Elasticsearch DSL features are supported, namely:
+
+* [Queries](http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/query-dsl-queries.html)
+* [Filters](http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/query-dsl-filters.html)
+* [Aggregations](http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/search-aggregations.html)
+* [Suggestions](http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/search-suggesters.html)
+* [Sorting](http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/search-request-sort.html)
+* [Pagination](http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/search-request-from-size.html)
+* Options (source filtering, highlighting, etc)
+
+A complex example would look like this:
+
+```ruby
+require 'elasticsearch'
+require 'elasticsearch/dsl'
+include Elasticsearch::DSL
+
+client = Elasticsearch::Client.new
+
+client.search index: 'bicycles.stackexchange.com', body: search do
+  query do
+    match title: 'fixed'
+  end
+end
+```
+
+**Please see the extensive RDoc examples in the source code and the integration tests.**
+
+## Development
+
+To work on the code, clone the repository and install the dependencies:
+
+```
+git clone https://github.com/elasticsearch/elasticsearch-ruby.git
+cd elasticsearch-ruby/elasticsearch-dsl/
+bundle install
+```
+
+Use the Rake tasks to run the test suites:
+
+```
+bundle exec rake test:unit
+bundle exec rake test:integration
+```
+
+To launch a separate Elasticsearch server for integration tests,
+see instructions in the main [README](../README.md#development).
+
 ## License
 
 This software is licensed under the Apache 2 license, quoted below.
 
-    Copyright (c) 2014 Elasticsearch <http://www.elasticsearch.org>
+    Copyright (c) 2015 Elasticsearch <http://www.elasticsearch.org>
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
